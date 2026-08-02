@@ -2,36 +2,43 @@
 > MàJ : 2026-08-03
 
 **État :** https://github.com/AntorFr/ha-alert-plus — public, Apache-2.0 comme HA
-core. **v0.2.0 publiée** (v0.1.0 aussi).
-CI verte : hassfest ✓, HACS 8/8 ✓, ruff ✓, pytest 28/28 ✓ sur HA 2026.8.0b3.
-
-**Deux sources d'alertes qui cohabitent** : bloc `alert_plus:` en YAML (schéma
-identique à `alert:` de core) **et** helpers créés par l'UI. Dans les deux cas
-unique_id + registre → icône / pièce / nom éditables par le front. Le service
-`alert_plus.reload` recharge le YAML sans restart, sans toucher aux alertes UI.
+core. v0.1.0 et v0.2.0 publiées ; **v0.3.0 = pivot d'archi, pas encore releasée**.
+CI verte : hassfest ✓, HACS 8/8 ✓, ruff ✓, pytest 27/27 ✓ sur HA 2026.8.0b3.
 **Jamais encore chargée dans un vrai Home Assistant.**
 
-**Décision (2026-08-03) : PAS de migration YAML → UI.** Demande explicite de
-l'utilisateur : il veut gérer ses alertes « en yaml et/ou en graphique ». Le YAML
-reste une source permanente, pas une passerelle. Un flux d'import avait été
-commencé puis jeté.
+**Pivot v0.3.0 (2026-08-03) — décision structurante de l'utilisateur :**
+le but est de **remplacer le domaine `alert` de core**, donc on doit être
+*exactement* core + nos améliorations. Les entités vivent dans le domaine
+**`alert`** (via `EntityComponent(LOGGER, "alert", hass)`), pas en
+`binary_sensor` + `switch`. `alert.fire_alert` reste `alert.fire_alert`, états
+`idle`/`on`/`off`, services `alert.turn_on`/`turn_off`/`toggle`. Le switch
+d'acquittement a disparu (redondant avec `alert.turn_off`).
 
-**Contexte de conception :**
-- Le `alert` de core est **gelé et déprécié** (issue home-assistant.io#42151) → une
-  PR qui le patche serait refusée. La cible core est donc une **nouvelle intégration
-  helper**, d'où le pattern `SchemaConfigFlowHandler` (calqué sur `threshold`).
-- Art antérieur : [Alert2](https://github.com/redstone99/hass-alert2), riche mais sa
-  config par alerte passe par un websocket maison + une carte Lovelace dédiée. Ici on
-  ne veut que de l'UI native.
-- Le domaine `alert_plus` est un nom de travail : à renommer si ça part en PR core.
-- HA 2026.8 exige **Python ≥ 3.14.2** (et pytest-homeassistant-custom-component
-  ≥ 0.13.317 suit) — la CI est sur 3.14, pas 3.13.
+**Nos ajouts sur core :** unique_id (→ registre → icône/pièce/nom dans l'UI),
+création graphique (helper), `alert_plus.reload`, acquittement qui survit au
+redémarrage, déclenchement si la condition est déjà vraie au démarrage, entités
+`notify`.
+
+**Pièges vérifiés :**
+- Poser un `entity_id` d'un autre domaine que sa plateforme est **déprécié et
+  casse en HA 2027.5** → seul le vrai `EntityComponent` sur `alert` marche.
+- `Platform.ALERT` n'existe pas ; le chemin config entry passe par
+  `EntityComponent.async_setup_entry` + un module de plateforme `alert.py`,
+  ce qui lie l'entité à sa config entry dans le registre.
+- ⚠️ Aucun bloc `alert:` ne doit subsister, sinon core alert se charge et les
+  deux se disputent le domaine et ses services.
+- HA 2026.8 exige Python ≥ 3.14.2 — la CI est sur 3.14.
+
+**Contexte :** `alert` de core est gelé/déprécié (home-assistant.io#42151). Art
+antérieur : [Alert2](https://github.com/redstone99/hass-alert2), mais config par
+websocket maison + carte Lovelace ; ici on ne veut que de l'UI native.
 
 **Prochaines étapes :**
-- [ ] Charger dans le vrai HA : une alerte YAML + une alerte UI (seule inconnue restante)
-- [ ] Basculer les alertes de Home-AssistantConfig en renommant `alert:` → `alert_plus:`
-      (`packages/integrations/automower.yaml`, `ico.yaml`, `packages/functions/battery_monitor.yaml`,
-      `securtity_system.yaml`) — puis corriger les automatisations (`alert.x` → `binary_sensor.x`)
-- [ ] Condition par template (au-delà de entity_id + state) — la demande la plus courante
-- [ ] Éventuel regroupement des 2 entités sous un device (pièce assignée en un seul point)
-- [ ] Puis seulement : ouvrir une discussion architecture chez HA avant toute PR
+- [ ] Release GitHub v0.3.0 (manifest bumpé)
+- [ ] Charger dans le vrai HA (seule inconnue restante)
+- [ ] Renommer `alert:` → `alert_plus:` dans Home-AssistantConfig
+      (`packages/areas/piscine.yaml`, `packages/functions/{battery_monitor,securtity_system}.yaml`,
+      `packages/integrations/{automower,ico}.yaml`) — 12 alertes, entity_id inchangés.
+      ⚠️ `alert.swiming_pool` est déclarée dans deux fichiers : doublon à trancher.
+- [ ] Condition par template (au-delà de entity_id + state)
+- [ ] Puis : discussion architecture chez HA avant toute PR

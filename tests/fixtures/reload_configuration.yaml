@@ -1,7 +1,7 @@
 alert_plus:
   reloaded_alert:
     name: "Reloaded alert"
-    entity_id: binary_sensor.ico_data_freshness
+    entity_id: binary_sensor.smoke
     repeat: 60
     notifiers:
       - notify

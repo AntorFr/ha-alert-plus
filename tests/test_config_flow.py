@@ -10,6 +10,7 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_REPEAT,
     CONF_STATE,
+    STATE_IDLE,
     STATE_ON,
 )
 from homeassistant.core import HomeAssistant
@@ -18,6 +19,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.alert_plus.const import (
+    ALERT_DOMAIN,
     CONF_CAN_ACKNOWLEDGE,
     CONF_MESSAGE,
     CONF_NOTIFIERS,
@@ -27,17 +29,17 @@ from custom_components.alert_plus.const import (
 
 USER_INPUT: dict[str, Any] = {
     CONF_NAME: "Front door",
-    CONF_ENTITY_ID: "binary_sensor.watched",
+    CONF_ENTITY_ID: "binary_sensor.door",
     CONF_STATE: STATE_ON,
     CONF_REPEAT: ["30"],
     CONF_SKIP_FIRST: False,
     CONF_CAN_ACKNOWLEDGE: True,
-    CONF_NOTIFIERS: ["test_notifier"],
+    CONF_NOTIFIERS: ["notify"],
 }
 
 
 async def test_user_flow_creates_an_alert(hass: HomeAssistant) -> None:
-    """The user flow stores everything in options and titles the entry."""
+    """The user flow stores everything in options and creates the entity."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
@@ -54,7 +56,8 @@ async def test_user_flow_creates_an_alert(hass: HomeAssistant) -> None:
     assert result["data"] == {}
     # Repeat delays are normalized to numbers on the way in.
     assert result["options"][CONF_REPEAT] == [30.0]
-    assert result["options"][CONF_ENTITY_ID] == "binary_sensor.watched"
+
+    assert hass.states.get(f"{ALERT_DOMAIN}.front_door").state == STATE_IDLE
 
 
 @pytest.mark.parametrize(
@@ -94,12 +97,12 @@ async def test_user_flow_rejects_a_broken_template(hass: HomeAssistant) -> None:
 
 async def test_options_flow_updates_and_reloads(hass: HomeAssistant) -> None:
     """Editing an alert rewrites its options and reloads the entry."""
-    hass.states.async_set("binary_sensor.watched", "off")
+    hass.states.async_set("binary_sensor.door", "off")
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Front door",
         options={
-            CONF_ENTITY_ID: "binary_sensor.watched",
+            CONF_ENTITY_ID: "binary_sensor.door",
             CONF_STATE: STATE_ON,
             CONF_REPEAT: [30.0],
             CONF_SKIP_FIRST: False,
@@ -118,7 +121,7 @@ async def test_options_flow_updates_and_reloads(hass: HomeAssistant) -> None:
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_ENTITY_ID: "binary_sensor.watched",
+            CONF_ENTITY_ID: "binary_sensor.door",
             CONF_STATE: "problem",
             CONF_REPEAT: ["5", "15"],
             CONF_SKIP_FIRST: True,
@@ -131,5 +134,5 @@ async def test_options_flow_updates_and_reloads(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_REPEAT] == [5.0, 15.0]
     assert entry.options[CONF_STATE] == "problem"
-    # Acknowledgement was turned off, so the reload dropped the switch.
-    assert hass.states.get("switch.front_door_acknowledged") is None
+    # The entry reloaded, so the alert is still there.
+    assert hass.states.get(f"{ALERT_DOMAIN}.front_door").state == STATE_IDLE

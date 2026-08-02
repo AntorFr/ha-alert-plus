@@ -8,5 +8,5 @@
   "integration_type": "helper",
   "iot_class": "local_push",
   "issue_tracker": "https://github.com/AntorFr/ha-alert-plus/issues",
-  "version": "0.2.0"
+  "version": "0.3.0"
 }

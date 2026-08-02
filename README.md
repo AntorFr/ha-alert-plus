@@ -2,25 +2,37 @@
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 
-A take on Home Assistant's `alert` integration whose entities are real registry
-entities — configurable in YAML, in the UI, or both at once.
+An upgrade of Home Assistant's `alert` integration, meant to replace it.
 
-Watch an entity, and repeat a notification for as long as it stays in the state
-you consider a problem.
+Everything core did is kept: the same `alert` domain, the same entity IDs, the
+same `idle` / `on` / `off` states, the same `alert.turn_on` / `turn_off` /
+`toggle` services, the same YAML schema down to the key names.
+**`alert.fire_alert` stays `alert.fire_alert`**, and automations calling it keep
+working untouched.
+
+What it adds is what core never had.
 
 ## Why
 
-Core's [`alert`](https://www.home-assistant.io/integrations/alert/) integration
-gives its entities no unique ID. Without one, an entity never reaches the entity
-registry, and everything the frontend offers is unavailable: you cannot rename
-it, give it an icon, assign it to an area, hide it, or expose it to a voice
-assistant.
+Core's [`alert`](https://www.home-assistant.io/integrations/alert/) gives its
+entities no unique ID. Without one, an entity never reaches the entity registry,
+and everything the frontend offers is unavailable: you cannot rename it, give it
+an icon, assign it to an area, hide it, or expose it to a voice assistant.
 
 Development of core `alert` is
 [frozen and headed for deprecation](https://github.com/home-assistant/home-assistant.io/issues/42151),
 so that is not going to be fixed there.
 
-Alert Plus fixes it without taking YAML away.
+## What it adds
+
+- **A unique ID on every alert** → registry entry → name, icon, area and
+  visibility editable from the frontend.
+- **Creation from the UI**, as a helper, alongside YAML. Both at once.
+- **`alert_plus.reload`**, so a YAML change no longer needs a restart.
+- **Acknowledgement survives a restart**, instead of being forgotten.
+- **A condition already met at startup raises the alert**, instead of staying
+  silent until the next state change.
+- **`notify` entities** supported alongside legacy `notify.*` services.
 
 ## Installation
 
@@ -34,44 +46,56 @@ Add `https://github.com/AntorFr/ha-alert-plus` as a custom repository of type
 Copy `custom_components/alert_plus` into your `custom_components` directory and
 restart Home Assistant.
 
-## Two ways to declare an alert
+## Migrating from core `alert`
 
-Both work at the same time, and neither is a migration path for the other. Use
-YAML for what you want versioned in git, the UI for the rest.
+Rename the key: `alert:` becomes `alert_plus:`. That is the whole migration.
+
+```diff
+-alert:
++alert_plus:
+   fire_alert:
+     name: "Fire alert"
+     entity_id: binary_sensor.smoke
+     repeat: 30
+     notifiers:
+       - notify
+```
+
+Entity IDs, states, services and attributes are unchanged, so nothing that
+referenced `alert.fire_alert` needs touching.
+
+> ⚠️ **Do not leave an `alert:` block behind.** It would load core's integration,
+> and the two would fight over the `alert` domain and its services. Rename every
+> block, or none.
+
+## Declaring alerts
+
+Both ways work at the same time. Use YAML for what you want versioned in git,
+the UI for the rest.
 
 ### YAML
 
-Under an `alert_plus:` key, using the **exact schema of core `alert:`**:
-
 ```yaml
 alert_plus:
-  ico_disconnected_alert:
-    name: "Alerte Ico déconnecté"
+  fire_alert:
+    name: "Fire alert"
     message: >
-      "Ico déconnecté depuis {{ relative_time(states.sensor.plouf_oxydo_reduction_potential.last_changed) }}"
+      "Smoke detected in {{ area_name('binary_sensor.smoke') }}"
     done_message: >
-      "Ico de nouveau connecté"
-    entity_id: binary_sensor.ico_data_freshness
+      "All clear"
+    entity_id: binary_sensor.smoke
     state: "on"            # optional, 'on' is the default
-    repeat: 180
+    repeat: 30
     can_acknowledge: true  # optional, default is true
-    skip_first: true       # optional, default is false
+    skip_first: false      # optional, default is false
     notifiers:
       - notify
 ```
 
-YAML stays the source of truth for these alerts: their options are edited in
-YAML, and applied with the **`alert_plus.reload` action** — no restart. Their
-**name, icon, area and visibility remain editable from the frontend** — that is
-the point of the unique ID.
-
-Reloading only touches the YAML alerts; those created from the UI are left
-running. If the YAML fails to validate, the reload is refused and the alerts
-already running stay up, with the error in the log.
-
-The YAML key is the unique ID *and* the entity object ID, so the alert above
-becomes `binary_sensor.ico_disconnected_alert`. Renaming the key creates a new
-entity and orphans the old one.
+The YAML key is both the entity ID and the unique ID, exactly as core used it.
+Apply changes with the **`alert_plus.reload`** action — no restart. Reloading
+only touches YAML alerts; those created from the UI keep running. If the YAML
+fails to validate, the reload is refused and the alerts already running stay up.
 
 ### UI
 
@@ -86,45 +110,25 @@ config entry per alert, everything editable from the frontend, no restart.
 | `state` | State that makes the alert fire (`on` by default) |
 | `repeat` | Minutes between notifications; several values escalate, and the last one repeats forever |
 | `skip_first` | Wait for the first delay instead of notifying immediately |
-| `can_acknowledge` | Adds a switch that mutes notifications until the alert clears |
+| `can_acknowledge` | Whether `alert.turn_off` may silence it |
 | `notifiers` | Legacy `notify.*` services, without the `notify.` prefix |
-| `notify_entities` | `notify` entities to send the message to (UI only) |
+| `notify_entities` | `notify` entities to send the message to (addition; UI only) |
 | `message` / `title` / `done_message` | Templates; the message defaults to the alert name |
 | `data` | Extra payload for the legacy notify services (notify entities ignore it) |
 
-## Entities
+## States and services
 
-Each alert creates:
-
-- `binary_sensor.<name>` — device class `problem`, `on` while the alert fires.
-  Attributes: `acknowledged`, `can_acknowledge`, `notification_count`,
-  `next_notification`, `watched_entity_id`.
-- `switch.<name>_acknowledged` — only when acknowledgement is allowed. Turning
-  it on mutes the repeats; it clears by itself once the alert ends.
-
-Both are in the entity registry whichever way the alert was declared.
-
-## Differences from core `alert`
-
-| Core `alert` | Alert Plus |
+| State | Meaning |
 | --- | --- |
-| YAML only | YAML **and/or** the UI, side by side |
-| No reload; YAML changes need a restart | `alert_plus.reload` applies YAML changes in place |
-| No unique ID, no registry entry | Registry-backed, configurable from the frontend |
-| One entity with `idle` / `on` / `off` | A `problem` binary sensor plus a separate acknowledgement switch |
-| Acknowledgement lost on restart | Acknowledgement restored across restarts |
-| A problem present at startup stays silent until the next state change | Evaluated at startup |
-| Legacy `notify.*` services only | Legacy services **and** `notify` entities |
+| `idle` | The watched entity is not in the alerting state |
+| `on` | Firing, not acknowledged |
+| `off` | Firing, acknowledged |
 
-### Coming from core `alert`
+`alert.turn_off` acknowledges, `alert.turn_on` unacknowledges, `alert.toggle`
+flips — as in core.
 
-Rename the key: `alert:` becomes `alert_plus:`. Nothing else in the block
-changes — the schema is identical.
-
-Entity IDs change domain but keep their object ID, so
-`alert.ico_disconnected_alert` becomes `binary_sensor.ico_disconnected_alert`,
-plus a `switch.ico_disconnected_alert_acknowledged`. Automations referring to
-your alerts need updating.
+Extra attributes, on top of what core reported: `watched_entity_id`,
+`can_acknowledge`, `notification_count`, `next_notification`.
 
 ## Development
 
@@ -148,5 +152,6 @@ CI runs hassfest, HACS validation, ruff and the test suite.
 
 ## Status
 
-Early but tested. The long-term goal is to propose this to Home Assistant core,
-which is why the code sticks to core conventions and lints with core's ruleset.
+Early but tested. The long-term goal is to propose this to Home Assistant core
+as the successor to `alert`, which is why it keeps core's domain and behaviour
+to the letter and lints with core's ruleset.

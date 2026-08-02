@@ -9,8 +9,10 @@ from unittest.mock import patch
 from homeassistant import config as hass_config
 from homeassistant.const import (
     CONF_ENTITY_ID,
+    CONF_REPEAT,
     CONF_STATE,
     SERVICE_RELOAD,
+    STATE_IDLE,
     STATE_OFF,
     STATE_ON,
     STATE_UNAVAILABLE,
@@ -23,43 +25,40 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 from custom_components.alert_plus.const import (
+    ALERT_DOMAIN,
     CONF_CAN_ACKNOWLEDGE,
     CONF_NOTIFIERS,
     CONF_SKIP_FIRST,
     DOMAIN,
 )
 
-WATCHED = "binary_sensor.ico_data_freshness"
-YAML_ENTITY = "binary_sensor.ico_disconnected_alert"
-RELOADED_ENTITY = "binary_sensor.reloaded_alert"
-UI_ENTITY = "binary_sensor.alerte_ui"
+WATCHED = "binary_sensor.smoke"
+YAML_ENTITY = f"{ALERT_DOMAIN}.fire_alert"
+RELOADED_ENTITY = f"{ALERT_DOMAIN}.reloaded_alert"
+UI_ENTITY = f"{ALERT_DOMAIN}.front_door"
 
 INITIAL_YAML: dict[str, Any] = {
     DOMAIN: {
-        "ico_disconnected_alert": {
-            "name": "Alerte Ico deconnecte",
+        "fire_alert": {
+            "name": "Fire alert",
             "entity_id": WATCHED,
-            "repeat": 180,
+            "repeat": 30,
             "notifiers": ["notify"],
         }
     }
 }
 
 
-def _fixture(name: str) -> str:
-    """Return the path of a configuration.yaml fixture."""
-    return str(Path(__file__).parent / "fixtures" / name)
-
-
 async def _reload(hass: HomeAssistant, fixture: str) -> None:
     """Call the reload service against a given configuration.yaml."""
-    with patch.object(hass_config, "YAML_CONFIG_FILE", _fixture(fixture)):
+    path = str(Path(__file__).parent / "fixtures" / fixture)
+    with patch.object(hass_config, "YAML_CONFIG_FILE", path):
         await hass.services.async_call(DOMAIN, SERVICE_RELOAD, blocking=True)
         await hass.async_block_till_done()
 
 
 async def _setup_yaml(hass: HomeAssistant) -> None:
-    """Set up one YAML alert, watching an idle entity."""
+    """Set up one YAML alert, watching an entity that starts idle."""
     hass.states.async_set(WATCHED, STATE_OFF)
     assert await async_setup_component(hass, DOMAIN, INITIAL_YAML)
     await hass.async_block_till_done()
@@ -67,14 +66,14 @@ async def _setup_yaml(hass: HomeAssistant) -> None:
 
 async def _add_ui_alert(hass: HomeAssistant) -> MockConfigEntry:
     """Add an alert created from the UI, watching its own entity."""
-    hass.states.async_set("binary_sensor.other", STATE_OFF)
+    hass.states.async_set("binary_sensor.door", STATE_OFF)
     entry = MockConfigEntry(
         domain=DOMAIN,
-        title="Alerte UI",
+        title="Front door",
         options={
-            CONF_ENTITY_ID: "binary_sensor.other",
+            CONF_ENTITY_ID: "binary_sensor.door",
             CONF_STATE: STATE_ON,
-            "repeat": [30.0],
+            CONF_REPEAT: [30.0],
             CONF_SKIP_FIRST: False,
             CONF_CAN_ACKNOWLEDGE: True,
             CONF_NOTIFIERS: ["notify"],
@@ -96,13 +95,11 @@ async def test_reload_swaps_the_yaml_alerts(hass: HomeAssistant) -> None:
     """Reloading drops the old YAML alerts and builds the new ones."""
     async_mock_service(hass, "notify", "notify")
     await _setup_yaml(hass)
-    assert hass.states.get(YAML_ENTITY).state == STATE_OFF
+    assert hass.states.get(YAML_ENTITY).state == STATE_IDLE
 
     await _reload(hass, "reload_configuration.yaml")
 
-    assert hass.states.get(RELOADED_ENTITY) is not None
-    assert hass.states.get(RELOADED_ENTITY).state == STATE_OFF
-    # The old alert is gone; its registry entry lingers as a restored placeholder.
+    assert hass.states.get(RELOADED_ENTITY).state == STATE_IDLE
     removed = hass.states.get(YAML_ENTITY)
     assert removed is None or removed.state == STATE_UNAVAILABLE
 
@@ -125,19 +122,19 @@ async def test_reload_leaves_config_entry_alerts_alone(hass: HomeAssistant) -> N
     calls = async_mock_service(hass, "notify", "notify")
     await _setup_yaml(hass)
     await _add_ui_alert(hass)
-    assert hass.states.get(UI_ENTITY).state == STATE_OFF
+    assert hass.states.get(UI_ENTITY).state == STATE_IDLE
 
     await _reload(hass, "reload_configuration.yaml")
 
-    # Still there, and still watching: a reset of the wrong platform would have
-    # silently removed it.
-    assert hass.states.get(UI_ENTITY).state == STATE_OFF
+    # Still there, and still watching: removing the wrong entities would have
+    # taken it out silently.
+    assert hass.states.get(UI_ENTITY).state == STATE_IDLE
 
-    hass.states.async_set("binary_sensor.other", STATE_ON)
+    hass.states.async_set("binary_sensor.door", STATE_ON)
     await hass.async_block_till_done()
 
     assert hass.states.get(UI_ENTITY).state == STATE_ON
-    assert [call.data["message"] for call in calls] == ["Alerte UI"]
+    assert [call.data["message"] for call in calls] == ["Front door"]
 
 
 async def test_reload_with_invalid_yaml_keeps_the_running_alerts(
@@ -149,7 +146,7 @@ async def test_reload_with_invalid_yaml_keeps_the_running_alerts(
 
     await _reload(hass, "invalid_configuration.yaml")
 
-    assert hass.states.get(YAML_ENTITY).state == STATE_OFF
+    assert hass.states.get(YAML_ENTITY).state == STATE_IDLE
 
     hass.states.async_set(WATCHED, STATE_ON)
     await hass.async_block_till_done()
