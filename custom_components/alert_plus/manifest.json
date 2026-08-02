@@ -1,0 +1,12 @@
+{
+  "domain": "alert_plus",
+  "name": "Alert Plus",
+  "after_dependencies": ["notify"],
+  "codeowners": ["@AntorFr"],
+  "config_flow": true,
+  "documentation": "https://github.com/AntorFr/ha-alert-plus",
+  "integration_type": "helper",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/AntorFr/ha-alert-plus/issues",
+  "version": "0.1.0"
+}

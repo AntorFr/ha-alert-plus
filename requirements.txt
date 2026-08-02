@@ -1,0 +1,8 @@
+# Development dependencies. Runtime dependencies belong in manifest.json, and
+# this integration has none beyond Home Assistant itself.
+#
+# Floors, not pins: each pytest-homeassistant-custom-component release carries a
+# specific Home Assistant version, and CI should keep tracking the latest one so
+# breaking core changes surface here rather than in a user's install.
+pytest-homeassistant-custom-component>=0.13.351
+ruff>=0.16.1

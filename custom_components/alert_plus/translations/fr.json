@@ -1,0 +1,90 @@
+{
+  "title": "Alert Plus",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Ajouter une alerte",
+        "description": "Surveille une entité et répète une notification tant qu'elle reste dans l'état d'alerte.",
+        "data": {
+          "name": "Nom",
+          "entity_id": "Entité surveillée",
+          "state": "État déclencheur",
+          "repeat": "Délais de répétition",
+          "skip_first": "Ignorer la première notification",
+          "can_acknowledge": "Peut être acquittée",
+          "notifiers": "Services de notification",
+          "notify_entities": "Entités de notification",
+          "message": "Message",
+          "title": "Titre de la notification",
+          "done_message": "Message de fin",
+          "data": "Données de notification"
+        },
+        "data_description": {
+          "entity_id": "L'alerte se déclenche tant que cette entité reste dans l'état déclencheur.",
+          "state": "État de l'entité surveillée qui déclenche l'alerte.",
+          "repeat": "Minutes entre deux notifications. Plusieurs valeurs permettent d'escalader : la dernière est ensuite répétée indéfiniment.",
+          "skip_first": "Attendre le premier délai de répétition avant de notifier, au lieu de notifier dès le déclenchement.",
+          "can_acknowledge": "Ajoute un interrupteur qui coupe les notifications jusqu'à la fin de l'alerte.",
+          "notifiers": "Services notify historiques à appeler, sans le préfixe notify.",
+          "notify_entities": "Entités de notification destinataires du message.",
+          "message": "Modèle rendu comme message de notification. Par défaut, le nom de l'alerte.",
+          "title": "Modèle rendu comme titre de la notification.",
+          "done_message": "Modèle envoyé à la fin de l'alerte, uniquement si une notification a été envoyée.",
+          "data": "Charge utile supplémentaire passée aux services notify historiques. Ignorée par les entités de notification."
+        }
+      }
+    },
+    "error": {
+      "invalid_repeat": "Les délais de répétition doivent être des nombres.",
+      "repeat_required": "Au moins un délai de répétition est requis.",
+      "repeat_too_short": "Les délais de répétition doivent valoir au moins une seconde (0,017 minute)."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options de l'alerte",
+        "description": "Le nom se change depuis les paramètres de l'entité ; tout le reste se configure ici.",
+        "data": {
+          "entity_id": "Entité surveillée",
+          "state": "État déclencheur",
+          "repeat": "Délais de répétition",
+          "skip_first": "Ignorer la première notification",
+          "can_acknowledge": "Peut être acquittée",
+          "notifiers": "Services de notification",
+          "notify_entities": "Entités de notification",
+          "message": "Message",
+          "title": "Titre de la notification",
+          "done_message": "Message de fin",
+          "data": "Données de notification"
+        },
+        "data_description": {
+          "entity_id": "L'alerte se déclenche tant que cette entité reste dans l'état déclencheur.",
+          "state": "État de l'entité surveillée qui déclenche l'alerte.",
+          "repeat": "Minutes entre deux notifications. Plusieurs valeurs permettent d'escalader : la dernière est ensuite répétée indéfiniment.",
+          "skip_first": "Attendre le premier délai de répétition avant de notifier, au lieu de notifier dès le déclenchement.",
+          "can_acknowledge": "Ajoute un interrupteur qui coupe les notifications jusqu'à la fin de l'alerte.",
+          "notifiers": "Services notify historiques à appeler, sans le préfixe notify.",
+          "notify_entities": "Entités de notification destinataires du message.",
+          "message": "Modèle rendu comme message de notification. Par défaut, le nom de l'alerte.",
+          "title": "Modèle rendu comme titre de la notification.",
+          "done_message": "Modèle envoyé à la fin de l'alerte, uniquement si une notification a été envoyée.",
+          "data": "Charge utile supplémentaire passée aux services notify historiques. Ignorée par les entités de notification."
+        }
+      }
+    },
+    "error": {
+      "invalid_repeat": "Les délais de répétition doivent être des nombres.",
+      "repeat_required": "Au moins un délai de répétition est requis.",
+      "repeat_too_short": "Les délais de répétition doivent valoir au moins une seconde (0,017 minute)."
+    }
+  },
+  "exceptions": {
+    "cannot_acknowledge": {
+      "message": "L'alerte {name} ne peut pas être acquittée."
+    },
+    "watched_entity_missing": {
+      "message": "L'entité surveillée {entity_id} n'existe plus."
+    }
+  }
+}
