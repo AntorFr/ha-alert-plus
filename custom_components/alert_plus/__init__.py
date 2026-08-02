@@ -25,6 +25,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ENTITY_ID,
+    CONF_ICON,
     CONF_NAME,
     CONF_REPEAT,
     CONF_STATE,
@@ -73,6 +74,9 @@ ALERT_SCHEMA = vol.Schema(
         ),
         vol.Optional(CONF_CAN_ACKNOWLEDGE, default=DEFAULT_CAN_ACKNOWLEDGE): cv.boolean,
         vol.Optional(CONF_SKIP_FIRST, default=DEFAULT_SKIP_FIRST): cv.boolean,
+        # An addition over core alert. Only a default: an icon set from the
+        # frontend is stored in the registry and wins over this one.
+        vol.Optional(CONF_ICON): cv.icon,
         vol.Optional(CONF_MESSAGE): cv.template,
         vol.Optional(CONF_DONE_MESSAGE): cv.template,
         vol.Optional(CONF_TITLE): cv.template,

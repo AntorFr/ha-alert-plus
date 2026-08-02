@@ -33,6 +33,7 @@ so that is not going to be fixed there.
 - **A condition already met at startup raises the alert**, instead of staying
   silent until the next state change.
 - **`notify` entities** supported alongside legacy `notify.*` services.
+- **An `icon:` option in YAML**, as a default the frontend can still override.
 
 ## Installation
 
@@ -88,6 +89,7 @@ alert_plus:
     repeat: 30
     can_acknowledge: true  # optional, default is true
     skip_first: false      # optional, default is false
+    icon: mdi:fire         # optional, addition over core alert
     notifiers:
       - notify
 ```
@@ -111,6 +113,7 @@ config entry per alert, everything editable from the frontend, no restart.
 | `repeat` | Minutes between notifications; several values escalate, and the last one repeats forever |
 | `skip_first` | Wait for the first delay instead of notifying immediately |
 | `can_acknowledge` | Whether `alert.turn_off` may silence it |
+| `icon` | Default icon, e.g. `mdi:fire` (addition; YAML only). An icon set from the frontend is stored in the registry and overrides it |
 | `notifiers` | Legacy `notify.*` services, without the `notify.` prefix |
 | `notify_entities` | `notify` entities to send the message to (addition; UI only) |
 | `message` / `title` / `done_message` | Templates; the message defaults to the alert name |

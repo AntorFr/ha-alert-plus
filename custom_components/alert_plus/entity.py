@@ -20,6 +20,7 @@ from homeassistant.components.notify import (
 )
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    CONF_ICON,
     CONF_REPEAT,
     CONF_STATE,
     EVENT_HOMEASSISTANT_STOP,
@@ -92,6 +93,9 @@ class AlertPlusEntity(RestoreEntity):
         self.entity_id = ENTITY_ID_FORMAT.format(object_id)
         self._attr_name = name
         self._attr_unique_id = unique_id
+        # Only a default: an icon set from the frontend lands in the registry,
+        # and the registry wins over this.
+        self._attr_icon = options.get(CONF_ICON)
 
         self._watched_entity_id = watched_entity_id
         self._alert_state: str = options[CONF_STATE]

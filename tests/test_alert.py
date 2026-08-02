@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.const import (
     ATTR_ENTITY_ID,
+    ATTR_ICON,
     SERVICE_TOGGLE,
     SERVICE_TURN_OFF,
     SERVICE_TURN_ON,
@@ -104,6 +105,32 @@ async def test_alert_is_registry_backed(hass: HomeAssistant) -> None:
 
     assert entry is not None
     assert entry.unique_id == OBJECT_ID
+
+
+async def test_icon_is_set_from_yaml(hass: HomeAssistant) -> None:
+    """The icon option shows up on the entity."""
+    await _setup(hass, icon="mdi:fire")
+    assert hass.states.get(ALERT_ENTITY).attributes[ATTR_ICON] == "mdi:fire"
+
+
+async def test_icon_from_the_frontend_wins_over_yaml(hass: HomeAssistant) -> None:
+    """The YAML icon is only a default; the registry overrides it.
+
+    That layering is the reason the icon option can exist at all: without a
+    unique ID there would be no registry entry to override it from.
+    """
+    await _setup(hass, icon="mdi:fire")
+
+    er.async_get(hass).async_update_entity(ALERT_ENTITY, icon="mdi:water")
+    await hass.async_block_till_done()
+
+    assert hass.states.get(ALERT_ENTITY).attributes[ATTR_ICON] == "mdi:water"
+
+
+async def test_no_icon_by_default(hass: HomeAssistant) -> None:
+    """Leaving the option out leaves the entity iconless, as core was."""
+    await _setup(hass)
+    assert ATTR_ICON not in hass.states.get(ALERT_ENTITY).attributes
 
 
 async def test_notifies_and_repeats(hass: HomeAssistant) -> None:
