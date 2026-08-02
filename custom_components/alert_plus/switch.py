@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from typing import Any, override
 
-from homeassistant.components.switch import SwitchEntity
+from homeassistant.components.switch import ENTITY_ID_FORMAT, SwitchEntity
 from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+)
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .alert import AlertPlusConfigEntry, AlertPlusRuntime
-from .const import ACKNOWLEDGE_ID_SUFFIX
+from .const import ACKNOWLEDGE_ID_SUFFIX, DOMAIN
 
 
 async def async_setup_entry(
@@ -27,6 +32,24 @@ async def async_setup_entry(
     async_add_entities([AlertPlusAcknowledgeSwitch(runtime)])
 
 
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up the acknowledgement switches of the YAML alerts."""
+    if discovery_info is None:
+        return
+
+    runtimes: dict[str, AlertPlusRuntime] = hass.data[DOMAIN]
+    async_add_entities(
+        AlertPlusAcknowledgeSwitch(runtimes[object_id])
+        for object_id in discovery_info["object_ids"]
+        if runtimes[object_id].can_acknowledge
+    )
+
+
 class AlertPlusAcknowledgeSwitch(SwitchEntity, RestoreEntity):
     """Mute an alert's notifications until the watched condition clears."""
 
@@ -37,7 +60,14 @@ class AlertPlusAcknowledgeSwitch(SwitchEntity, RestoreEntity):
         """Initialize the acknowledgement switch."""
         self._runtime = runtime
         self._attr_name = f"{runtime.name} acknowledged"
-        self._attr_unique_id = f"{runtime.entry.entry_id}{ACKNOWLEDGE_ID_SUFFIX}"
+        self._attr_unique_id = f"{runtime.unique_id}{ACKNOWLEDGE_ID_SUFFIX}"
+
+        if runtime.suggested_object_id is not None:
+            self.entity_id = async_generate_entity_id(
+                ENTITY_ID_FORMAT,
+                f"{runtime.suggested_object_id}_acknowledged",
+                hass=runtime.hass,
+            )
 
     @override
     async def async_added_to_hass(self) -> None:

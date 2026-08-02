@@ -1,12 +1,17 @@
 # Status — ha-alert-plus
 > MàJ : 2026-08-02
 
-**État :** v0.1.0 poussée sur https://github.com/AntorFr/ha-alert-plus (public,
-Apache-2.0 comme HA core). **CI entièrement verte** : hassfest ✓, HACS 8/8 ✓,
-ruff ✓, pytest 18/18 ✓ sur HA 2026.8.0b3. Intégration helper `alert_plus` :
-1 config entry = 1 alerte, donc unique_id + registre + config par le front
-(nom, icône, pièce) — ce que le `alert` de core ne permet pas.
+**État :** v0.1.0 sur https://github.com/AntorFr/ha-alert-plus (public, Apache-2.0
+comme HA core). CI verte : hassfest ✓, HACS 8/8 ✓, ruff ✓, pytest 23/23 ✓ sur
+HA 2026.8.0b3. **Deux sources d'alertes qui cohabitent** : bloc `alert_plus:` en
+YAML (schéma identique à `alert:` de core) **et** helpers créés par l'UI. Dans les
+deux cas unique_id + registre → icône / pièce / nom éditables par le front.
 **Jamais encore chargée dans un vrai Home Assistant.**
+
+**Décision (2026-08-03) : PAS de migration YAML → UI.** Demande explicite de
+l'utilisateur : il veut gérer ses alertes « en yaml et/ou en graphique ». Le YAML
+reste une source permanente, pas une passerelle. Un flux d'import avait été
+commencé puis jeté.
 
 **Contexte de conception :**
 - Le `alert` de core est **gelé et déprécié** (issue home-assistant.io#42151) → une
@@ -20,9 +25,12 @@ ruff ✓, pytest 18/18 ✓ sur HA 2026.8.0b3. Intégration helper `alert_plus` :
   ≥ 0.13.317 suit) — la CI est sur 3.14, pas 3.13.
 
 **Prochaines étapes :**
-- [ ] Charger dans le vrai HA et créer une alerte via l'UI (seule inconnue restante)
-- [ ] Migrer les alertes YAML de Home-AssistantConfig (`packages/integrations/automower.yaml`,
-      `ico.yaml`, `packages/functions/battery_monitor.yaml`, `securtity_system.yaml`)
+- [ ] Charger dans le vrai HA : une alerte YAML + une alerte UI (seule inconnue restante)
+- [ ] Basculer les alertes de Home-AssistantConfig en renommant `alert:` → `alert_plus:`
+      (`packages/integrations/automower.yaml`, `ico.yaml`, `packages/functions/battery_monitor.yaml`,
+      `securtity_system.yaml`) — puis corriger les automatisations (`alert.x` → `binary_sensor.x`)
+- [ ] **Service `alert_plus.reload`** : aujourd'hui un changement YAML impose un restart HA.
+      C'est le manque le plus gênant au quotidien.
 - [ ] Release GitHub taguée v0.1.0 (= manifest.json.version)
 - [ ] Condition par template (au-delà de entity_id + state) — la demande la plus courante
 - [ ] Éventuel regroupement des 2 entités sous un device (pièce assignée en un seul point)

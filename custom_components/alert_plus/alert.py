@@ -8,6 +8,7 @@ firing and notifying regardless of which entities the user chose to expose.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -63,15 +64,27 @@ class AlertPlusRuntime:
     def __init__(
         self,
         hass: HomeAssistant,
-        entry: AlertPlusConfigEntry,
+        *,
+        name: str,
+        unique_id: str,
         watched_entity_id: str,
+        options: Mapping[str, Any],
+        suggested_object_id: str | None = None,
     ) -> None:
-        """Initialize the alert from its config entry options."""
-        self.hass = hass
-        self.entry = entry
-        self.watched_entity_id = watched_entity_id
+        """Initialize an alert.
 
-        options = entry.options
+        Takes a plain options mapping rather than a config entry: the very same
+        runtime backs both an alert created from the UI and one declared in
+        YAML, which has no entry to read from.
+        """
+        self.hass = hass
+        self.name = name
+        self.unique_id = unique_id
+        self.watched_entity_id = watched_entity_id
+        # Set for YAML alerts, so the entity id follows the key the user wrote
+        # rather than a slug of the display name.
+        self.suggested_object_id = suggested_object_id
+
         self._alert_state: str = options[CONF_STATE]
         self._delays = [timedelta(minutes=value) for value in options[CONF_REPEAT]]
         self._skip_first: bool = options[CONF_SKIP_FIRST]
@@ -94,17 +107,13 @@ class AlertPlusRuntime:
         self._next_notification: datetime | None = None
         self._cancel_scheduled: CALLBACK_TYPE | None = None
         self._listeners: list[CALLBACK_TYPE] = []
+        self._unsubscribes: list[CALLBACK_TYPE] = []
 
     def _build_template(self, value: str | None) -> Template | None:
         """Compile an optional template from the stored option string."""
         if value is None:
             return None
         return Template(value, self.hass)
-
-    @property
-    def name(self) -> str:
-        """Return the alert name, which is the config entry title."""
-        return self.entry.title
 
     @property
     def is_firing(self) -> bool:
@@ -161,15 +170,22 @@ class AlertPlusRuntime:
         entity has settled on a real state instead of being briefly unknown, and
         so entities of this entry have restored their acknowledgement first.
         """
-        self.entry.async_on_unload(
+        self._unsubscribes.append(
             async_track_state_change_event(
                 self.hass, [self.watched_entity_id], self._async_watched_changed
             )
         )
-        self.entry.async_on_unload(
+        self._unsubscribes.append(
             async_at_started(self.hass, self._async_initial_check)
         )
-        self.entry.async_on_unload(self._async_cancel_scheduled)
+
+    @callback
+    def async_shutdown(self) -> None:
+        """Stop watching the source entity and drop any pending notification."""
+        for unsubscribe in self._unsubscribes:
+            unsubscribe()
+        self._unsubscribes.clear()
+        self._async_cancel_scheduled()
 
     async def _async_initial_check(self, _hass: HomeAssistant) -> None:
         """Fire straight away when the condition is already met at startup.

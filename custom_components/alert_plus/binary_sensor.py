@@ -5,11 +5,17 @@ from __future__ import annotations
 from typing import Any, override
 
 from homeassistant.components.binary_sensor import (
+    ENTITY_ID_FORMAT,
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.entity import async_generate_entity_id
+from homeassistant.helpers.entity_platform import (
+    AddConfigEntryEntitiesCallback,
+    AddEntitiesCallback,
+)
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .alert import AlertPlusConfigEntry, AlertPlusRuntime
 from .const import (
@@ -18,6 +24,7 @@ from .const import (
     ATTR_NEXT_NOTIFICATION,
     ATTR_NOTIFICATION_COUNT,
     ATTR_WATCHED_ENTITY_ID,
+    DOMAIN,
 )
 
 
@@ -30,6 +37,23 @@ async def async_setup_entry(
     async_add_entities([AlertPlusBinarySensor(entry.runtime_data)])
 
 
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up the alert binary sensors declared in YAML."""
+    if discovery_info is None:
+        return
+
+    runtimes: dict[str, AlertPlusRuntime] = hass.data[DOMAIN]
+    async_add_entities(
+        AlertPlusBinarySensor(runtimes[object_id])
+        for object_id in discovery_info["object_ids"]
+    )
+
+
 class AlertPlusBinarySensor(BinarySensorEntity):
     """Report whether the watched condition is currently met."""
 
@@ -40,7 +64,14 @@ class AlertPlusBinarySensor(BinarySensorEntity):
         """Initialize the alert binary sensor."""
         self._runtime = runtime
         self._attr_name = runtime.name
-        self._attr_unique_id = runtime.entry.entry_id
+        self._attr_unique_id = runtime.unique_id
+
+        if runtime.suggested_object_id is not None:
+            # A YAML alert keeps the entity id of the key the user wrote, rather
+            # than a slug of its display name.
+            self.entity_id = async_generate_entity_id(
+                ENTITY_ID_FORMAT, runtime.suggested_object_id, hass=runtime.hass
+            )
 
     @override
     async def async_added_to_hass(self) -> None:

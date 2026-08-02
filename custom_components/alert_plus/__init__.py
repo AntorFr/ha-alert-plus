@@ -1,20 +1,131 @@
 """The Alert Plus integration.
 
-A UI-configurable take on Home Assistant's frozen ``alert`` integration: one
-config entry per alert, so every alert gets a stable unique ID and can be named,
-given an icon and assigned to an area from the frontend like any other entity.
+A UI-configurable take on Home Assistant's frozen ``alert`` integration: every
+alert gets a stable unique ID, so it can be named, given an icon and assigned to
+an area from the frontend like any other entity.
+
+Alerts can be declared either way, and the two live side by side:
+
+- **YAML**, under an ``alert_plus:`` key using the exact schema of core
+  ``alert:``. YAML stays the source of truth for those alerts; their options are
+  edited in YAML, while name, icon and area remain editable from the frontend.
+- **The UI**, as helpers. One config entry per alert, options editable from the
+  frontend too.
 """
 
 from __future__ import annotations
 
-from homeassistant.const import CONF_ENTITY_ID, Platform
+from typing import Any
+
+from homeassistant.const import (
+    CONF_ENTITY_ID,
+    CONF_NAME,
+    CONF_REPEAT,
+    CONF_STATE,
+    STATE_ON,
+    Platform,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers.discovery import async_load_platform
+from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
 from .alert import AlertPlusConfigEntry, AlertPlusRuntime
-from .const import ACKNOWLEDGE_ID_SUFFIX, CONF_CAN_ACKNOWLEDGE, DOMAIN, PLATFORMS
+from .const import (
+    ACKNOWLEDGE_ID_SUFFIX,
+    CONF_CAN_ACKNOWLEDGE,
+    CONF_DATA,
+    CONF_DONE_MESSAGE,
+    CONF_MESSAGE,
+    CONF_NOTIFIERS,
+    CONF_SKIP_FIRST,
+    CONF_TITLE,
+    DEFAULT_CAN_ACKNOWLEDGE,
+    DEFAULT_SKIP_FIRST,
+    DOMAIN,
+    MIN_REPEAT_MINUTES,
+    PLATFORMS,
+)
+
+# Deliberately identical to core alert's ALERT_SCHEMA, so an existing `alert:`
+# block moves over by renaming its key to `alert_plus:` and nothing else.
+ALERT_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_NAME): cv.string,
+        vol.Required(CONF_ENTITY_ID): cv.entity_id,
+        vol.Optional(CONF_STATE, default=STATE_ON): cv.string,
+        vol.Required(CONF_REPEAT): vol.All(
+            cv.ensure_list,
+            [vol.Coerce(float)],
+            [vol.Range(min=MIN_REPEAT_MINUTES)],
+        ),
+        vol.Optional(CONF_CAN_ACKNOWLEDGE, default=DEFAULT_CAN_ACKNOWLEDGE): cv.boolean,
+        vol.Optional(CONF_SKIP_FIRST, default=DEFAULT_SKIP_FIRST): cv.boolean,
+        vol.Optional(CONF_MESSAGE): cv.template,
+        vol.Optional(CONF_DONE_MESSAGE): cv.template,
+        vol.Optional(CONF_TITLE): cv.template,
+        vol.Optional(CONF_DATA): dict,
+        vol.Optional(CONF_NOTIFIERS, default=list): vol.All(
+            cv.ensure_list, [cv.string]
+        ),
+    }
+)
+
+CONFIG_SCHEMA = vol.Schema(
+    {DOMAIN: cv.schema_with_slug_keys(ALERT_SCHEMA)}, extra=vol.ALLOW_EXTRA
+)
+
+TEMPLATE_KEYS = (CONF_MESSAGE, CONF_DONE_MESSAGE, CONF_TITLE)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the alerts declared in YAML."""
+    alerts: dict[str, Any] = config.get(DOMAIN) or {}
+    runtimes: dict[str, AlertPlusRuntime] = hass.data.setdefault(DOMAIN, {})
+
+    for object_id, alert_config in alerts.items():
+        runtimes[object_id] = AlertPlusRuntime(
+            hass,
+            name=alert_config[CONF_NAME],
+            # The YAML key is the user's own stable identifier, which is exactly
+            # what a unique ID needs to be.
+            unique_id=object_id,
+            watched_entity_id=alert_config[CONF_ENTITY_ID],
+            options=_yaml_to_options(alert_config),
+            suggested_object_id=object_id,
+        )
+
+    if not runtimes:
+        return True
+
+    for platform in PLATFORMS:
+        hass.async_create_task(
+            async_load_platform(
+                hass, platform, DOMAIN, {"object_ids": list(runtimes)}, config
+            )
+        )
+
+    for runtime in runtimes.values():
+        runtime.async_start()
+
+    return True
+
+
+@callback
+def _yaml_to_options(alert_config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize a validated YAML alert into the runtime's options mapping.
+
+    The schema validates templates into ``Template`` objects; they go back to
+    their source string so YAML and config entries feed the runtime the exact
+    same shape.
+    """
+    options = dict(alert_config)
+    for key in TEMPLATE_KEYS:
+        if (template := options.get(key)) is not None:
+            options[key] = template.template
+    return options
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: AlertPlusConfigEntry) -> bool:
@@ -33,12 +144,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: AlertPlusConfigEntry) ->
 
     _async_cleanup_acknowledge_switch(registry, entry)
 
-    entry.runtime_data = AlertPlusRuntime(hass, entry, watched_entity_id)
+    runtime = AlertPlusRuntime(
+        hass,
+        name=entry.title,
+        unique_id=entry.entry_id,
+        watched_entity_id=watched_entity_id,
+        options=entry.options,
+    )
+    entry.runtime_data = runtime
+    entry.async_on_unload(runtime.async_shutdown)
 
     # Platforms first: the acknowledgement switch restores its state on add, and
     # the runtime must see that before it evaluates the watched entity.
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.runtime_data.async_start()
+    runtime.async_start()
 
     return True
 
