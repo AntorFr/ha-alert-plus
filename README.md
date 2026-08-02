@@ -94,6 +94,15 @@ python3 -m venv .venv
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 ```
 
+To run hassfest locally, hand it a clean tree. Pointed at the working copy it
+walks into `.venv` and validates every Home Assistant core integration it finds
+in `site-packages`, drowning the report in thousands of irrelevant errors:
+
+```bash
+tree=$(mktemp -d) && git archive HEAD | tar -x -C "$tree"
+docker run --rm -v "$tree://github/workspace" ghcr.io/home-assistant/hassfest
+```
+
 CI runs hassfest, HACS validation, ruff and the test suite.
 
 ## Status
