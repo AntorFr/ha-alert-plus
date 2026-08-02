@@ -1,0 +1,7 @@
+alert_plus:
+  reloaded_alert:
+    name: "Reloaded alert"
+    entity_id: binary_sensor.ico_data_freshness
+    repeat: 60
+    notifiers:
+      - notify

@@ -1,0 +1,6 @@
+# `entity_id` is required: this block must fail validation, and a failed reload
+# must leave the running alerts alone.
+alert_plus:
+  broken_alert:
+    name: "Broken alert"
+    repeat: 60

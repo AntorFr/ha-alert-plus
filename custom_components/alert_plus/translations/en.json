@@ -79,6 +79,12 @@
       "repeat_too_short": "Repeat delays must be at least one second (0.017 minutes)."
     }
   },
+  "services": {
+    "reload": {
+      "name": "Reload",
+      "description": "Reloads the alerts declared in YAML, without restarting Home Assistant. Alerts created from the UI are left untouched."
+    }
+  },
   "exceptions": {
     "cannot_acknowledge": {
       "message": "The alert {name} cannot be acknowledged."

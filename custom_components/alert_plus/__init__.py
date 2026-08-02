@@ -15,6 +15,7 @@ Alerts can be declared either way, and the two live side by side:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from homeassistant.const import (
@@ -22,13 +23,20 @@ from homeassistant.const import (
     CONF_NAME,
     CONF_REPEAT,
     CONF_STATE,
+    EVENT_HOMEASSISTANT_STOP,
+    SERVICE_RELOAD,
     STATE_ON,
     Platform,
 )
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.helpers.discovery import async_load_platform
+from homeassistant.helpers.reload import (
+    async_get_platform_without_config_entry,
+    async_integration_yaml_config,
+)
+from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.typing import ConfigType
 import voluptuous as vol
 
@@ -45,6 +53,7 @@ from .const import (
     DEFAULT_CAN_ACKNOWLEDGE,
     DEFAULT_SKIP_FIRST,
     DOMAIN,
+    LOGGER,
     MIN_REPEAT_MINUTES,
     PLATFORMS,
 )
@@ -81,10 +90,51 @@ TEMPLATE_KEYS = (CONF_MESSAGE, CONF_DONE_MESSAGE, CONF_TITLE)
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the alerts declared in YAML."""
-    alerts: dict[str, Any] = config.get(DOMAIN) or {}
-    runtimes: dict[str, AlertPlusRuntime] = hass.data.setdefault(DOMAIN, {})
+    """Set up the alerts declared in YAML, and the reload service."""
 
+    async def _async_reload(call: ServiceCall) -> None:
+        """Rebuild the YAML alerts from the configuration on disk."""
+        # Read and validate before tearing anything down, so a typo in the YAML
+        # does not take the running alerts with it.
+        reload_config = await async_integration_yaml_config(hass, DOMAIN)
+        if reload_config is None:
+            LOGGER.error(
+                "Not reloading alerts: the YAML configuration failed to validate"
+            )
+            return
+
+        await _async_unload_yaml_alerts(hass)
+        await _async_setup_yaml_alerts(hass, reload_config, wait_for_platforms=True)
+
+    @callback
+    def _async_stop(_event: Event) -> None:
+        """Drop the pending notifications when Home Assistant stops.
+
+        Config entry alerts are torn down when their entry is unloaded, but a
+        YAML alert has no owner to do that, so its repeat timer would otherwise
+        stay armed past shutdown.
+        """
+        for runtime in hass.data[DOMAIN].values():
+            runtime.async_shutdown()
+
+    hass.data.setdefault(DOMAIN, {})
+    async_register_admin_service(hass, DOMAIN, SERVICE_RELOAD, _async_reload)
+    hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STOP, _async_stop)
+
+    await _async_setup_yaml_alerts(hass, config, wait_for_platforms=False)
+
+    return True
+
+
+async def _async_setup_yaml_alerts(
+    hass: HomeAssistant, config: ConfigType, *, wait_for_platforms: bool
+) -> None:
+    """Build the alerts declared in YAML and hand them to the platforms."""
+    alerts: dict[str, Any] = config.get(DOMAIN) or {}
+    if not alerts:
+        return
+
+    runtimes: dict[str, AlertPlusRuntime] = hass.data[DOMAIN]
     for object_id, alert_config in alerts.items():
         runtimes[object_id] = AlertPlusRuntime(
             hass,
@@ -97,20 +147,44 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             suggested_object_id=object_id,
         )
 
-    if not runtimes:
-        return True
+    loaders = [
+        async_load_platform(
+            hass, platform, DOMAIN, {"object_ids": list(alerts)}, config
+        )
+        for platform in PLATFORMS
+    ]
+
+    if wait_for_platforms:
+        # On reload the base components are already up, so awaiting costs
+        # nothing and guarantees the acknowledgement switches are restored
+        # before the alerts start evaluating their watched entity.
+        await asyncio.gather(*loaders)
+    else:
+        # At startup, awaiting would block on setting up binary_sensor and
+        # switch, which import every platform integration underneath them.
+        for loader in loaders:
+            hass.async_create_task(loader)
+
+    for object_id in alerts:
+        runtimes[object_id].async_start()
+
+
+async def _async_unload_yaml_alerts(hass: HomeAssistant) -> None:
+    """Tear down every YAML alert, leaving the ones from config entries alone."""
+    runtimes: dict[str, AlertPlusRuntime] = hass.data[DOMAIN]
+    for runtime in runtimes.values():
+        runtime.async_shutdown()
+    runtimes.clear()
 
     for platform in PLATFORMS:
-        hass.async_create_task(
-            async_load_platform(
-                hass, platform, DOMAIN, {"object_ids": list(runtimes)}, config
-            )
+        # Deliberately not async_get_platforms(): that also returns the
+        # platforms owned by config entries, and reloading YAML must not
+        # disturb the alerts created from the UI.
+        entity_platform = async_get_platform_without_config_entry(
+            hass, DOMAIN, platform
         )
-
-    for runtime in runtimes.values():
-        runtime.async_start()
-
-    return True
+        if entity_platform is not None:
+            await entity_platform.async_reset()
 
 
 @callback

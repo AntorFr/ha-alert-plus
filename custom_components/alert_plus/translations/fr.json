@@ -79,6 +79,12 @@
       "repeat_too_short": "Les délais de répétition doivent valoir au moins une seconde (0,017 minute)."
     }
   },
+  "services": {
+    "reload": {
+      "name": "Recharger",
+      "description": "Recharge les alertes déclarées en YAML, sans redémarrer Home Assistant. Les alertes créées depuis l'UI ne sont pas touchées."
+    }
+  },
   "exceptions": {
     "cannot_acknowledge": {
       "message": "L'alerte {name} ne peut pas être acquittée."

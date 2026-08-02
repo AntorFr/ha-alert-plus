@@ -61,9 +61,13 @@ alert_plus:
 ```
 
 YAML stays the source of truth for these alerts: their options are edited in
-YAML, and changes need a Home Assistant restart. Their **name, icon, area and
-visibility remain editable from the frontend** — that is the point of the unique
-ID.
+YAML, and applied with the **`alert_plus.reload` action** — no restart. Their
+**name, icon, area and visibility remain editable from the frontend** — that is
+the point of the unique ID.
+
+Reloading only touches the YAML alerts; those created from the UI are left
+running. If the YAML fails to validate, the reload is refused and the alerts
+already running stay up, with the error in the log.
 
 The YAML key is the unique ID *and* the entity object ID, so the alert above
 becomes `binary_sensor.ico_disconnected_alert`. Renaming the key creates a new
@@ -105,6 +109,7 @@ Both are in the entity registry whichever way the alert was declared.
 | Core `alert` | Alert Plus |
 | --- | --- |
 | YAML only | YAML **and/or** the UI, side by side |
+| No reload; YAML changes need a restart | `alert_plus.reload` applies YAML changes in place |
 | No unique ID, no registry entry | Registry-backed, configurable from the frontend |
 | One entity with `idle` / `on` / `off` | A `problem` binary sensor plus a separate acknowledgement switch |
 | Acknowledgement lost on restart | Acknowledgement restored across restarts |
